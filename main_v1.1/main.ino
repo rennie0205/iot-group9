@@ -39,14 +39,32 @@ DHT dht(DHTPIN, DHTTYPE);
 // Light Sensor
 BH1750 lightMeter;
 
+// Relay Signal to trigger Water Pump
+#define RELAY_SIGNAL D11
+
 // Timer setup
-const int UPDATE_INTERVAL = 5000;  // 5 seconds, to see the change faster
+unsigned long lastUpdate = 0;
+const long UPDATE_INTERVAL = 5000; // 5 seconds
+
+// Related to connecting to cloud
+// #define LED_GREEN D6 // Need to check which pins can do the signal correctly
+bool connectedToCloud = false;
+unsigned long lastUpdateConnecting = 0;
+const long CONNECTING_INTERVAL = 10000; // 3 seconds, delay when still in the process in connecting to cloud
 
 void setup() {
   Serial.begin(115200);
   dht.begin();
   Wire.begin(21, 22);
   lightMeter.begin();
+
+  pinMode(RELAY_SIGNAL, OUTPUT);
+  // pinMode(LED_GREEN, OUTPUT);
+  
+  digitalWrite(RELAY_SIGNAL, HIGH); // Ensure that the water pump is off by default
+  // digitalWrite(LED_GREEN, LOW); // Ensure light indicator for connection is off by default
+  
+  
 
   // Initialize cloud properties and start cloud connection
   initProperties();
@@ -67,16 +85,60 @@ void loop() {
   ArduinoCloud.update();  // Run cloud service
   
   if (ArduinoCloud.connected()) {
-    sendSensorData();
+    
 
-    delay(UPDATE_INTERVAL);
+    // Reset connected to cloud and timer variables
+    if (connectedToCloud == false) {
+      Serial.println("Connected to Arduino Cloud...");
+      // digitalWrite(LED_GREEN, HIGH);
+      connectedToCloud = true;
+      lastUpdateConnecting = 0;
+      
+    }
+
+    bool isGoodToRun = checkDelay(lastUpdate, UPDATE_INTERVAL);
+
+    if(isGoodToRun == true) {
+      sendSensorData();
+      lastUpdate = millis();
+    };
+    
   } else {
-    Serial.println("Trying to connect to Arduino Cloud...");
+    // Reset connected to cloud and timer variables
+    connectedToCloud = false;
+    lastUpdate = 0;
+    // digitalWrite(LED_GREEN, LOW);
+    
+    bool isGoodToRun = checkDelay(lastUpdate, CONNECTING_INTERVAL);
+    if (isGoodToRun == true) {
+      Serial.println("Trying to connect to Arduino Cloud...");
+      lastUpdateConnecting = millis();
+    };
+    
   };
 }
 
 /*
+  Check whether time has passed based on the given interval.
+*/
+bool checkDelay(long previousMillis, long interval) {
+   unsigned long currentMillis = millis();
+  return {currentMillis - lastUpdate >= interval};
+}
 
+void triggerManualPump() {
+  if (manualPumpTrigger == true) {
+    Serial.println("Turning on relay");
+    digitalWrite(RELAY_SIGNAL, LOW);
+    manualPumpTrigger = true;
+  } else {
+    Serial.println("Turning off relay");
+    digitalWrite(RELAY_SIGNAL, HIGH);
+    manualPumpTrigger = false;
+  };
+}
+
+/*
 Reading the data in the sensors
 */
 void sendSensorData() {
@@ -162,24 +224,23 @@ void onHumidityChange()  {
   // Add your code here to act upon Humidity change
 }
 
-
-
-
-
-
-
-
-
-
 /*
   Since ManualPumpTrigger is READ_WRITE variable, onManualPumpTriggerChange() is
   executed every time a new value is received from IoT Cloud.
 */
 void onManualPumpTriggerChange()  {
   // Add your code here to act upon ManualPumpTrigger change
+
+  Serial.println(manualPumpTrigger);
+
+  if (manualPumpTrigger) {
+    Serial.println("Turning on relay");
+    digitalWrite(RELAY_SIGNAL, LOW);
+  } else {
+    Serial.println("Turning off relay");
+    digitalWrite(RELAY_SIGNAL, HIGH);
+  };
 }
-
-
 
 /*
   Since SoilMoistureThreshold is READ_WRITE variable, onSoilMoistureThresholdChange() is
@@ -189,7 +250,6 @@ void onSoilMoistureThresholdChange()  {
   // Add your code here to act upon SoilMoistureThreshold change
 }
 
-
 /*
   Since WateringPeriod is READ_WRITE variable, onWateringPeriodChange() is
   executed every time a new value is received from IoT Cloud.
@@ -198,10 +258,6 @@ void onWateringPeriodChange()  {
   // Add your code here to act upon WateringPeriod change
 }
 
-
-
-
-
 /*
   Since Temperature is READ_WRITE variable, onTemperatureChange() is
   executed every time a new value is received from IoT Cloud.
@@ -209,9 +265,6 @@ void onWateringPeriodChange()  {
 void onTemperatureChange()  {
   // Add your code here to act upon Temperature change
 }
-
-
-
 
 
 
