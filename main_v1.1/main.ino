@@ -6,16 +6,14 @@
 
   The following variables are automatically generated and updated when changes are made to the Thing
 
+  float durationWaterPumpOn;
   float humidity;
   float temperature;
   int dailyWaterPumpCount;
-  int dailyWaterUsed;
   int lightIntensity;
   int soilMoisture;
   int soilMoistureThreshold;
-  int wateringPeriod;
-  bool erroneousAlert;
-  bool manualPumpTrigger;
+  bool pumpTrigger;
 
   Variables which are marked as READ/WRITE in the Cloud Thing will also have functions
   which are called when their values are changed from the Dashboard.
@@ -28,30 +26,46 @@
 #include <Wire.h>
 #include <BH1750.h>
 
+// ===============================================================
 // DHT11 Sensor Setup
+// ===============================================================
 #define DHTPIN 17
 #define DHTTYPE DHT11
 DHT dht(DHTPIN, DHTTYPE);
 
+// ===============================================================
 // Soil Moisture Sensor Pin
+// ===============================================================
 #define SOIL_MOISTURE_PIN 34
 
+// ===============================================================
 // Light Sensor
+// ===============================================================
 BH1750 lightMeter;
 
+// ===============================================================
 // Relay Signal to trigger Water Pump
+// ===============================================================
 #define RELAY_SIGNAL D11
+unsigned long pumpStartTime = 0; // Stores the time when the pump was turned on
 
+// ===============================================================
 // Timer setup
+// ===============================================================
 unsigned long lastUpdate = 0;
-const long UPDATE_INTERVAL = 5000; // 5 seconds
+const long UPDATE_INTERVAL = 3000; // 3 seconds
 
+// ===============================================================
 // Related to connecting to cloud
-// #define LED_GREEN D6 // Need to check which pins can do the signal correctly
+// ===============================================================
+int LED_GREEN = D12; // Need to check which pins can do the signal correctly
 bool connectedToCloud = false;
 unsigned long lastUpdateConnecting = 0;
-const long CONNECTING_INTERVAL = 10000; // 3 seconds, delay when still in the process in connecting to cloud
+const long CONNECTING_INTERVAL = 10000; // 10 seconds, delay when still in the process in connecting to cloud
 
+// ===============================================================
+// Main program
+// ===============================================================
 void setup() {
   Serial.begin(115200);
   dht.begin();
@@ -59,10 +73,10 @@ void setup() {
   lightMeter.begin();
 
   pinMode(RELAY_SIGNAL, OUTPUT);
-  // pinMode(LED_GREEN, OUTPUT);
+  pinMode(LED_GREEN, OUTPUT);
   
   digitalWrite(RELAY_SIGNAL, HIGH); // Ensure that the water pump is off by default
-  // digitalWrite(LED_GREEN, LOW); // Ensure light indicator for connection is off by default
+  digitalWrite(LED_GREEN, LOW); // Ensure light indicator for connection is off by default
   
   
 
@@ -90,7 +104,7 @@ void loop() {
     // Reset connected to cloud and timer variables
     if (connectedToCloud == false) {
       Serial.println("Connected to Arduino Cloud...");
-      // digitalWrite(LED_GREEN, HIGH);
+      digitalWrite(LED_GREEN, HIGH);
       connectedToCloud = true;
       lastUpdateConnecting = 0;
       
@@ -107,35 +121,27 @@ void loop() {
     // Reset connected to cloud and timer variables
     connectedToCloud = false;
     lastUpdate = 0;
-    // digitalWrite(LED_GREEN, LOW);
     
-    bool isGoodToRun = checkDelay(lastUpdate, CONNECTING_INTERVAL);
+    bool isGoodToRun = checkDelay(lastUpdateConnecting, CONNECTING_INTERVAL);
     if (isGoodToRun == true) {
       Serial.println("Trying to connect to Arduino Cloud...");
       lastUpdateConnecting = millis();
+      digitalWrite(LED_GREEN, LOW);
+      
     };
     
   };
 }
 
+// ===============================================================
+// Helper functions
+// ===============================================================
 /*
   Check whether time has passed based on the given interval.
 */
 bool checkDelay(long previousMillis, long interval) {
    unsigned long currentMillis = millis();
   return {currentMillis - lastUpdate >= interval};
-}
-
-void triggerManualPump() {
-  if (manualPumpTrigger == true) {
-    Serial.println("Turning on relay");
-    digitalWrite(RELAY_SIGNAL, LOW);
-    manualPumpTrigger = true;
-  } else {
-    Serial.println("Turning off relay");
-    digitalWrite(RELAY_SIGNAL, HIGH);
-    manualPumpTrigger = false;
-  };
 }
 
 /*
@@ -174,73 +180,51 @@ void sendSensorData() {
 
   // Read soil moisture
   int soilRaw = analogRead(SOIL_MOISTURE_PIN);
-  int soilPercent = map(soilRaw, 3720, 1500, 0, 100);
+  Serial.println("\n");
+  Serial.println("Raw soil moisture reading: " + String(soilRaw));
+  Serial.println("\n");
+  int soilPercent = map(soilRaw, 3056, 1622, 0, 100);
   soilPercent = constrain(soilPercent, 0, 100);
-  Serial.print("Soil Moisture: ");
-  Serial.println(soilPercent);
+  Serial.println("Soil Moisture: " + String(soilPercent)+"%");
   soilMoisture = soilPercent;
-}
 
-// Below were generated functions from the cloud
-
-/*
-  Since Moisture is READ_WRITE variable, onMoistureChange() is
-  executed every time a new value is received from IoT Cloud.
-*/
-void onMoistureChange()  {
-  // Add your code here to act upon Moisture change
+  autoTriggerWaterPumpFromSoilMoistureThreshold(soilPercent);
+  
 }
 
 /*
-  Since LightIntensity is READ_WRITE variable, onLightIntensityChange() is
-  executed every time a new value is received from IoT Cloud.
+  Turns the water pump on/off depending on the current reading of the soil moisture
 */
-void onLightIntensityChange()  {
-  // Add your code here to act upon LightIntensity change
-}
-
-
-/*
-  Since BatteryPower is READ_WRITE variable, onBatteryPowerChange() is
-  executed every time a new value is received from IoT Cloud.
-*/
-void onBatteryPowerChange()  {
-  // Add your code here to act upon BatteryPower change
-}
-
-/*
-  Since SoilMoisture is READ_WRITE variable, onSoilMoistureChange() is
-  executed every time a new value is received from IoT Cloud.
-*/
-void onSoilMoistureChange()  {
-  // Add your code here to act upon SoilMoisture change
-}
-
-/*
-  Since Humidity is READ_WRITE variable, onHumidityChange() is
-  executed every time a new value is received from IoT Cloud.
-*/
-void onHumidityChange()  {
-  // Add your code here to act upon Humidity change
-}
-
-/*
-  Since ManualPumpTrigger is READ_WRITE variable, onManualPumpTriggerChange() is
-  executed every time a new value is received from IoT Cloud.
-*/
-void onManualPumpTriggerChange()  {
-  // Add your code here to act upon ManualPumpTrigger change
-
-  Serial.println(manualPumpTrigger);
-
-  if (manualPumpTrigger) {
-    Serial.println("Turning on relay");
-    digitalWrite(RELAY_SIGNAL, LOW);
-  } else {
-    Serial.println("Turning off relay");
+void autoTriggerWaterPumpFromSoilMoistureThreshold(int soilPercent) {
+  if (soilPercent < soilMoistureThreshold) {
+    if (!pumpTrigger){
+      Serial.println("Auto turning water pump on");
+      digitalWrite(RELAY_SIGNAL, LOW);
+      pumpTrigger = true;
+  
+      pumpStartTime = millis();
+    };
+    
+  } else if (pumpTrigger){ //Only turns the pump off if it's not off in the first place
+    Serial.println("Auto turning water pump off");
     digitalWrite(RELAY_SIGNAL, HIGH);
+    pumpTrigger = false;
+
+    float elapsedTime = (millis() - pumpStartTime) / 1000.0;
+    elapsedTime = round(elapsedTime * 10) / 10.0; // Round to 1 decimal place
+
+    Serial.print("Total pump runtime: ");
+    Serial.print(elapsedTime);
+    Serial.println(" seconds");
+
+    durationWaterPumpOn = elapsedTime;
+    
   };
 }
+
+// ===============================================================
+// Below were auto generated functions from the cloud
+// ===============================================================
 
 /*
   Since SoilMoistureThreshold is READ_WRITE variable, onSoilMoistureThresholdChange() is
@@ -259,14 +243,18 @@ void onWateringPeriodChange()  {
 }
 
 /*
-  Since Temperature is READ_WRITE variable, onTemperatureChange() is
+  Since PumpTrigger is READ_WRITE variable, onPumpTriggerChange() is
   executed every time a new value is received from IoT Cloud.
 */
-void onTemperatureChange()  {
-  // Add your code here to act upon Temperature change
+void onPumpTriggerChange()  {
+  Serial.println(pumpTrigger);
+
+  if (pumpTrigger) {
+    Serial.println("Turning on relay");
+    digitalWrite(RELAY_SIGNAL, LOW);
+  } else {
+    Serial.println("Turning off relay");
+    digitalWrite(RELAY_SIGNAL, HIGH);\
+  };
 }
-
-
-
-
 
