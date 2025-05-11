@@ -13,7 +13,8 @@
   int lightIntensity;
   int soilMoisture;
   int soilMoistureThreshold;
-  bool pumpTrigger;
+  bool autoPumpTrigger;
+  bool manualPumpTrigger;
 
   Variables which are marked as READ/WRITE in the Cloud Thing will also have functions
   which are called when their values are changed from the Dashboard.
@@ -48,6 +49,8 @@ BH1750 lightMeter;
 // ===============================================================
 #define RELAY_SIGNAL D11
 unsigned long pumpStartTime = 0; // Stores the time when the pump was turned on
+bool pumpIsOn = false; // Flag to indicate if the pump is currently on
+// const long WATER_PUMP_DURATION_MAX = 10000; // 10 seconds
 
 // ===============================================================
 // Timer setup
@@ -183,12 +186,15 @@ void sendSensorData() {
   Serial.println("\n");
   Serial.println("Raw soil moisture reading: " + String(soilRaw));
   Serial.println("\n");
-  int soilPercent = map(soilRaw, 3056, 1622, 0, 100);
+  int soilPercent = map(soilRaw, 3030, 1800, 0, 100);
   soilPercent = constrain(soilPercent, 0, 100);
   Serial.println("Soil Moisture: " + String(soilPercent)+"%");
   soilMoisture = soilPercent;
 
-  autoTriggerWaterPumpFromSoilMoistureThreshold(soilPercent);
+  // Only trigger the water pump if the autoPumpTrigger is enabled
+  if (autoPumpTrigger) {
+    autoTriggerWaterPumpFromSoilMoistureThreshold(soilPercent);
+  }
   
 }
 
@@ -197,18 +203,20 @@ void sendSensorData() {
 */
 void autoTriggerWaterPumpFromSoilMoistureThreshold(int soilPercent) {
   if (soilPercent < soilMoistureThreshold) {
-    if (!pumpTrigger){
+    if (!pumpIsOn){
       Serial.println("Auto turning water pump on");
       digitalWrite(RELAY_SIGNAL, LOW);
-      pumpTrigger = true;
-  
+      pumpIsOn = true;
+      manualPumpTrigger = true; // To sync with the cloud
       pumpStartTime = millis();
     };
     
-  } else if (pumpTrigger){ //Only turns the pump off if it's not off in the first place
+  } else if (pumpIsOn){ //Only turns the pump off if it's not off in the first place
     Serial.println("Auto turning water pump off");
     digitalWrite(RELAY_SIGNAL, HIGH);
-    pumpTrigger = false;
+    pumpIsOn = false;
+
+    manualPumpTrigger = false; // To sync with the cloud
 
     float elapsedTime = (millis() - pumpStartTime) / 1000.0;
     elapsedTime = round(elapsedTime * 10) / 10.0; // Round to 1 decimal place
@@ -243,18 +251,30 @@ void onWateringPeriodChange()  {
 }
 
 /*
-  Since PumpTrigger is READ_WRITE variable, onPumpTriggerChange() is
+  Since ManualPumpTrigger is READ_WRITE variable, onManualPumpTriggerChange() is
   executed every time a new value is received from IoT Cloud.
 */
-void onPumpTriggerChange()  {
-  Serial.println(pumpTrigger);
-
-  if (pumpTrigger) {
+void onManualPumpTriggerChange()  {
+  // Disable auto pump trigger when manually triggered via the dashboard
+  autoPumpTrigger = false;
+  pumpIsOn = false;
+  
+  if (manualPumpTrigger) {
     Serial.println("Turning on relay");
     digitalWrite(RELAY_SIGNAL, LOW);
   } else {
     Serial.println("Turning off relay");
-    digitalWrite(RELAY_SIGNAL, HIGH);\
+    digitalWrite(RELAY_SIGNAL, HIGH);
+
   };
 }
 
+
+
+/*
+  Since AutoPumpTrigger is READ_WRITE variable, onAutoPumpTriggerChange() is
+  executed every time a new value is received from IoT Cloud.
+*/
+void onAutoPumpTriggerChange()  {
+  // Add your code here to act upon AutoPumpTrigger change
+}
