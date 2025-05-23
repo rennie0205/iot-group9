@@ -59,7 +59,7 @@ const long UPDATE_INTERVAL = 3000; // 3 seconds
 // ===============================================================
 // Related to connecting to cloud
 // ===============================================================
-int LED_GREEN = D12; // Need to check which pins can do the signal correctly
+int LED_GREEN = D12;
 bool connectedToCloud = false;
 unsigned long lastUpdateConnecting = 0;
 const long CONNECTING_INTERVAL = 10000; // 10 seconds, delay when still in the process in connecting to cloud
