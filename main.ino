@@ -9,7 +9,6 @@
   float durationWaterPumpOn;
   float humidity;
   float temperature;
-  int dailyWaterPumpCount;
   int lightIntensity;
   int soilMoisture;
   int soilMoistureThreshold;
@@ -50,7 +49,6 @@ BH1750 lightMeter;
 #define RELAY_SIGNAL D11
 unsigned long pumpStartTime = 0; // Stores the time when the pump was turned on
 bool pumpIsOn = false; // Flag to indicate if the pump is currently on
-// const long WATER_PUMP_DURATION_MAX = 10000; // 10 seconds
 
 // ===============================================================
 // Timer setup
@@ -144,7 +142,7 @@ void loop() {
 */
 bool checkDelay(long previousMillis, long interval) {
    unsigned long currentMillis = millis();
-  return {currentMillis - lastUpdate >= interval};
+  return {currentMillis - previousMillis >= interval};
 }
 
 /*
@@ -183,9 +181,7 @@ void sendSensorData() {
 
   // Read soil moisture
   int soilRaw = analogRead(SOIL_MOISTURE_PIN);
-  Serial.println("\n");
-  Serial.println("Raw soil moisture reading: " + String(soilRaw));
-  Serial.println("\n");
+  Serial.println("\nRaw soil moisture reading: " + String(soilRaw) + "\n");
   int soilPercent = map(soilRaw, 3030, 1800, 0, 100);
   soilPercent = constrain(soilPercent, 0, 100);
   Serial.println("Soil Moisture: " + String(soilPercent)+"%");
@@ -240,14 +236,6 @@ void autoTriggerWaterPumpFromSoilMoistureThreshold(int soilPercent) {
 */
 void onSoilMoistureThresholdChange()  {
   // Add your code here to act upon SoilMoistureThreshold change
-}
-
-/*
-  Since WateringPeriod is READ_WRITE variable, onWateringPeriodChange() is
-  executed every time a new value is received from IoT Cloud.
-*/
-void onWateringPeriodChange()  {
-  // Add your code here to act upon WateringPeriod change
 }
 
 /*
